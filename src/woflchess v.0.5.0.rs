@@ -1,6 +1,49 @@
 use std::fmt;
 use rand::Rng;  // Add this line
 
+// First, let's add piece values as constants
+const PAWN_VALUE: i32 = 100;
+const KNIGHT_VALUE: i32 = 320;
+const BISHOP_VALUE: i32 = 330;
+const ROOK_VALUE: i32 = 500;
+const QUEEN_VALUE: i32 = 900;
+const KING_VALUE: i32 = 20000;
+
+// Piece-square tables for positional evaluation
+// These tables give bonuses/penalties based on piece positions
+const PAWN_TABLE: [[i32; 8]; 8] = [
+    [0,  0,  0,  0,  0,  0,  0,  0],
+    [50, 50, 50, 50, 50, 50, 50, 50],
+    [10, 10, 20, 30, 30, 20, 10, 10],
+    [5,  5, 10, 25, 25, 10,  5,  5],
+    [0,  0,  0, 20, 20,  0,  0,  0],
+    [5, -5,-10,  0,  0,-10, -5,  5],
+    [5, 10, 10,-20,-20, 10, 10,  5],
+    [0,  0,  0,  0,  0,  0,  0,  0]
+];
+
+const KNIGHT_TABLE: [[i32; 8]; 8] = [
+    [-50,-40,-30,-30,-30,-30,-40,-50],
+    [-40,-20,  0,  0,  0,  0,-20,-40],
+    [-30,  0, 10, 15, 15, 10,  0,-30],
+    [-30,  5, 15, 20, 20, 15,  5,-30],
+    [-30,  0, 15, 20, 20, 15,  0,-30],
+    [-30,  5, 10, 15, 15, 10,  5,-30],
+    [-40,-20,  0,  5,  5,  0,-20,-40],
+    [-50,-40,-30,-30,-30,-30,-40,-50]
+];
+
+const BISHOP_TABLE: [[i32; 8]; 8] = [
+    [-20,-10,-10,-10,-10,-10,-10,-20],
+    [-10,  0,  0,  0,  0,  0,  0,-10],
+    [-10,  0,  5, 10, 10,  5,  0,-10],
+    [-10,  5,  5, 10, 10,  5,  5,-10],
+    [-10,  0, 10, 10, 10, 10,  0,-10],
+    [-10, 10, 10, 10, 10, 10, 10,-10],
+    [-10,  5,  0,  0,  0,  0,  5,-10],
+    [-20,-10,-10,-10,-10,-10,-10,-20]
+];
+
 #[derive(Clone, Copy, PartialEq, Debug)]  // Added Debug here
 enum PieceType {
     Pawn,
@@ -374,6 +417,21 @@ impl GameState {
         false
     }
 
+    fn is_promotion_move(&self, from: (usize, usize), to: (usize, usize)) -> bool {
+        if let Some(piece) = self.get_piece_at(from) {
+            if piece.piece_type == PieceType::Pawn {
+                match piece.color {
+                    Color::White => to.1 == 7,  // White pawn reaching 8th rank
+                    Color::Black => to.1 == 0,  // Black pawn reaching 1st rank
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
+
     fn make_move(&mut self, move_: Move) -> Result<(), &'static str> {
         if !self.is_valid_move(&move_) {
             return Err("Invalid move");
@@ -390,28 +448,21 @@ impl GameState {
         Ok(())
     }
     
-        fn make_move_without_validation(&mut self, move_: &Move) {
-            // Update last_pawn_double_move
-            if move_.piece_moved.piece_type == PieceType::Pawn {
-                let dy = (move_.to.1 as i32 - move_.from.1 as i32).abs();
-                if dy == 2 {
-                    self.last_pawn_double_move = Some(move_.to);
-                } else {
-                    self.last_pawn_double_move = None;
-                }
-        
-                // Handle en passant capture
-                if move_.is_en_passant {
-                    let capture_y = move_.from.1;
-                    self.board[move_.to.0][capture_y] = None;
-                }
-            } else {
-                self.last_pawn_double_move = None;
-            }
-    
+    // Modify make_move_without_validation to handle promotions
+    fn make_move_without_validation(&mut self, move_: &Move) {
+        // Handle promotion
+        if let Some(promotion_type) = move_.promotion {
+            let promoted_piece = Piece {
+                piece_type: promotion_type,
+                color: move_.piece_moved.color,
+            };
+            self.board[move_.to.0][move_.to.1] = Some(promoted_piece);
+        } else {
             self.board[move_.to.0][move_.to.1] = Some(move_.piece_moved);
-            self.board[move_.from.0][move_.from.1] = None;
-    
+        }
+
+        self.board[move_.from.0][move_.from.1] = None;
+
             // Handle castling rook movement
             if move_.is_castling {
                 match (move_.from, move_.to) {
@@ -434,7 +485,24 @@ impl GameState {
                     _ => {}
                 }
             }
-    
+
+            // Update last_pawn_double_move for en passant
+            if move_.piece_moved.piece_type == PieceType::Pawn {
+                let dy = (move_.to.1 as i32 - move_.from.1 as i32).abs();
+                if dy == 2 {
+                    self.last_pawn_double_move = Some(move_.to);
+                } else {
+                    self.last_pawn_double_move = None;
+                }
+
+                if move_.is_en_passant {
+                    let capture_y = move_.from.1;
+                    self.board[move_.to.0][capture_y] = None;
+                }
+            } else {
+                self.last_pawn_double_move = None;
+            }
+  
             // Update king position if king was moved
             if move_.piece_moved.piece_type == PieceType::King {
                 match move_.piece_moved.color {
@@ -753,6 +821,92 @@ impl GameState {
         Ok((from, to))
     }
 
+    
+    fn get_piece_value(&self, piece: &Piece) -> i32 {
+      match piece.piece_type {
+          PieceType::Pawn => PAWN_VALUE,
+          PieceType::Knight => KNIGHT_VALUE,
+          PieceType::Bishop => BISHOP_VALUE,
+          PieceType::Rook => ROOK_VALUE,
+          PieceType::Queen => QUEEN_VALUE,
+          PieceType::King => KING_VALUE,
+      }
+  }
+
+  fn get_position_bonus(&self, piece: &Piece, pos: (usize, usize)) -> i32 {
+      let (x, y) = pos;
+      // For black pieces, we flip the position on the board
+      let (row, col) = if piece.color == Color::Black {
+          (7 - y, x)
+      } else {
+          (y, x)
+      };
+
+      match piece.piece_type {
+          PieceType::Pawn => PAWN_TABLE[row][col],
+          PieceType::Knight => KNIGHT_TABLE[row][col],
+          PieceType::Bishop => BISHOP_TABLE[row][col],
+          _ => 0  // No position bonus for other pieces yet
+      }
+  }
+
+  fn evaluate_position(&self) -> i32 {
+      let mut score = 0;
+      
+      // Material and basic positional evaluation
+      for i in 0..8 {
+          for j in 0..8 {
+              if let Some(piece) = self.board[i][j] {
+                  let multiplier = if piece.color == Color::White { 1 } else { -1 };
+                  let piece_value = self.get_piece_value(&piece);
+                  let position_bonus = self.get_position_bonus(&piece, (i, j));
+                  
+                  score += multiplier * (piece_value + position_bonus);
+              }
+          }
+      }
+
+      // Penalize doubled pawns
+      for file in 0..8 {
+          let mut white_pawns = 0;
+          let mut black_pawns = 0;
+          for rank in 0..8 {
+              if let Some(piece) = self.board[file][rank] {
+                  if piece.piece_type == PieceType::Pawn {
+                      if piece.color == Color::White {
+                          white_pawns += 1;
+                      } else {
+                          black_pawns += 1;
+                      }
+                  }
+              }
+          }
+          if white_pawns > 1 {
+              score -= 20 * (white_pawns - 1);  // Penalty for doubled pawns
+          }
+          if black_pawns > 1 {
+              score += 20 * (black_pawns - 1);  // Penalty for opponent's doubled pawns
+          }
+      }
+
+      // Additional evaluation for check and checkmate
+      if self.is_checkmate() {
+          if self.current_turn == Color::White {
+              score = -30000;  // White is checkmated
+          } else {
+              score = 30000;   // Black is checkmated
+          }
+      } else if self.is_in_check(self.current_turn) {
+          if self.current_turn == Color::White {
+              score -= 50;     // White is in check
+          } else {
+              score += 50;     // Black is in check
+          }
+      }
+
+      score
+  }
+
     fn find_piece_that_can_move(&self, piece_type: PieceType, to: (usize, usize)) -> Result<(usize, usize), &'static str> {
         let mut valid_pieces = Vec::new();
 
@@ -785,6 +939,51 @@ impl GameState {
         }
     }
 
+    // Add minimax search with alpha-beta pruning
+    fn minimax(&mut self, depth: i32, mut alpha: i32, mut beta: i32, maximizing_player: bool) -> i32 {
+        if depth == 0 {
+            return self.evaluate_position();
+        }
+
+        let legal_moves = self.generate_legal_moves();
+        
+        // Check for terminal states
+        if legal_moves.is_empty() {
+            if self.is_checkmate() {
+                return if maximizing_player { -30000 } else { 30000 };
+            }
+            return 0; // Stalemate
+        }
+
+        if maximizing_player {
+            let mut max_eval = i32::MIN;
+            for move_ in legal_moves {
+                let mut new_state = self.clone();
+                new_state.make_move_without_validation(&move_);
+                let eval = new_state.minimax(depth - 1, alpha, beta, false);
+                max_eval = max_eval.max(eval);
+                alpha = alpha.max(eval);
+                if beta <= alpha {
+                    break; // Beta cutoff
+                }
+            }
+            max_eval
+        } else {
+            let mut min_eval = i32::MAX;
+            for move_ in legal_moves {
+                let mut new_state = self.clone();
+                new_state.make_move_without_validation(&move_);
+                let eval = new_state.minimax(depth - 1, alpha, beta, true);
+                min_eval = min_eval.min(eval);
+                beta = beta.min(eval);
+                if beta <= alpha {
+                    break; // Alpha cutoff
+                }
+            }
+            min_eval
+        }
+    }
+
     fn parse_move_string(&self, move_str: &str) -> Result<((usize, usize), (usize, usize)), &'static str> {
         // Parse normal moves like "e2 to e4" or "e2e4"
         let parts: Vec<&str> = move_str.split_whitespace().collect();
@@ -803,24 +1002,52 @@ impl GameState {
         Ok((from, to))
     }
 
-    fn make_move_from_str(&mut self, move_str: &str) -> Result<(), &'static str> {
-        let (from, to) = if move_str.contains(' ') || move_str.len() == 4 {
-            // Regular coordinate notation (e.g., "e2e4" or "e2 e4")
-            self.parse_move_string(move_str)?
-        } else {
-            // Algebraic notation (e.g., "Nf3")
-            self.parse_algebraic_notation(move_str)?
-        };
-
-        let piece = self.get_piece_at(from)
-            .ok_or("No piece at starting square")?;
-
-        if piece.color != self.current_turn {
-            return Err("It's not your turn!");
+   // Modify make_move_from_str to handle promotion notation
+   fn make_move_from_str(&mut self, move_str: &str) -> Result<(), &'static str> {
+    // Handle promotion notation like "e7e8Q" or "e7e8=Q"
+    let mut promotion_type = None;
+    let (basic_move, promotion_char) = if move_str.len() >= 5 {
+        let (main_move, promotion) = move_str.split_at(4);
+        let promotion = promotion.trim_start_matches('=');
+        match promotion.chars().next() {
+            Some('Q') => (main_move, Some(PieceType::Queen)),
+            Some('R') => (main_move, Some(PieceType::Rook)),
+            Some('B') => (main_move, Some(PieceType::Bishop)),
+            Some('N') => (main_move, Some(PieceType::Knight)),
+            _ => (move_str, None),
         }
+    } else {
+        (move_str, None)
+    };
 
-        let move_ = self.create_move(from, to)
-            .ok_or("Couldn't create move")?;
+    let (from, to) = if basic_move.contains(' ') || basic_move.len() == 4 {
+        self.parse_move_string(basic_move)?
+    } else {
+        self.parse_algebraic_notation(basic_move)?
+    };
+
+    let piece = self.get_piece_at(from)
+        .ok_or("No piece at starting square")?;
+
+    if piece.color != self.current_turn {
+        return Err("It's not your turn!");
+    }
+
+    // Check if this is a promotion move
+    if piece.piece_type == PieceType::Pawn && self.is_promotion_move(from, to) {
+        // If no promotion piece specified, default to Queen
+        promotion_type = Some(promotion_type.unwrap_or(PieceType::Queen));
+    }
+
+    let move_ = Move {
+        from,
+        to,
+        piece_moved: piece,
+        piece_captured: self.get_piece_at(to).cloned(),
+        is_castling: false,
+        is_en_passant: false,
+        promotion: promotion_type,
+    };
 
         if !self.is_valid_move(&move_) {
             return match piece.piece_type {
@@ -859,73 +1086,78 @@ impl GameState {
             self.make_move(move_)
         }
 
-    fn generate_legal_moves(&self) -> Vec<Move> {
-        let mut legal_moves = Vec::new();
-        
-        for i in 0..8 {
-            for j in 0..8 {
-                if let Some(piece) = self.board[i][j] {
-                    if piece.color == self.current_turn {
-                        // Try all possible destination squares
-                        for x in 0..8 {
-                            for y in 0..8 {
-                                let test_move = Move {
-                                    from: (i, j),
-                                    to: (x, y),
-                                    piece_moved: piece,
-                                    piece_captured: self.board[x][y],
-                                    is_castling: false, // We'll check this in is_valid_move
-                                    is_en_passant: false, // We'll check this in is_valid_move
-                                    promotion: None,
-                                };
-                                
-                                if self.is_valid_move(&test_move) {
-                                    legal_moves.push(test_move);
-                                }
+  // Modify generate_legal_moves to use move ordering
+  fn generate_legal_moves(&self) -> Vec<Move> {
+    let mut moves = Vec::new();
+    
+    for i in 0..8 {
+        for j in 0..8 {
+            if let Some(piece) = self.board[i][j] {
+                if piece.color == self.current_turn {
+                    // Try all possible destination squares
+                    for x in 0..8 {
+                        for y in 0..8 {
+                            let test_move = Move {
+                                from: (i, j),
+                                to: (x, y),
+                                piece_moved: piece,
+                                piece_captured: self.board[x][y],
+                                is_castling: false,
+                                is_en_passant: false,
+                                promotion: None,
+                            };
+                            
+                            if self.is_valid_move(&test_move) {
+                                moves.push(test_move);
                             }
                         }
+                    }
+                    
+                    // Check castling moves for kings
+                    if piece.piece_type == PieceType::King {
+                        let rank = if piece.color == Color::White { 0 } else { 7 };
                         
-                        // Check castling moves if this is a king
-                        if piece.piece_type == PieceType::King {
-                            let rank = if piece.color == Color::White { 0 } else { 7 };
-                            
-                            // Kingside castling
-                            let kingside_move = Move {
-                                from: (4, rank),
-                                to: (6, rank),
-                                piece_moved: piece,
-                                piece_captured: None,
-                                is_castling: true,
-                                is_en_passant: false,
-                                promotion: None,
-                            };
-                            if self.is_valid_move(&kingside_move) {
-                                legal_moves.push(kingside_move);
-                            }
-                            
-                            // Queenside castling
-                            let queenside_move = Move {
-                                from: (4, rank),
-                                to: (2, rank),
-                                piece_moved: piece,
-                                piece_captured: None,
-                                is_castling: true,
-                                is_en_passant: false,
-                                promotion: None,
-                            };
-                            if self.is_valid_move(&queenside_move) {
-                                legal_moves.push(queenside_move);
-                            }
+                        // Kingside castling
+                        let kingside_move = Move {
+                            from: (4, rank),
+                            to: (6, rank),
+                            piece_moved: piece,
+                            piece_captured: None,
+                            is_castling: true,
+                            is_en_passant: false,
+                            promotion: None,
+                        };
+                        if self.is_valid_move(&kingside_move) {
+                            moves.push(kingside_move);
+                        }
+                        
+                        // Queenside castling
+                        let queenside_move = Move {
+                            from: (4, rank),
+                            to: (2, rank),
+                            piece_moved: piece,
+                            piece_captured: None,
+                            is_castling: true,
+                            is_en_passant: false,
+                            promotion: None,
+                        };
+                        if self.is_valid_move(&queenside_move) {
+                            moves.push(queenside_move);
                         }
                     }
                 }
             }
         }
+    }
+    
+    // Order moves for better alpha-beta pruning
+    self.order_moves(&mut moves);
+    moves
+}
         
         legal_moves
     }
-    
-    // Make a random computer move
+
     fn make_computer_move(&mut self) -> Result<(), &'static str> {
         let legal_moves = self.generate_legal_moves();
         
@@ -936,13 +1168,39 @@ impl GameState {
                 return Err("Stalemate!");
             }
         }
+
+        let mut best_score = i32::MIN;
+        let mut best_moves = Vec::new();
+        let search_depth = 3; // Look ahead 3 moves (can be adjusted)
         
-        // Select a random move
+        // Search all possible moves
+        for move_ in legal_moves {
+            let mut test_state = self.clone();
+            test_state.make_move_without_validation(&move_);
+            
+            // Evaluate this move using minimax
+            let score = -test_state.minimax(search_depth - 1, i32::MIN, i32::MAX, true);
+            
+            if score > best_score {
+                best_score = score;
+                best_moves.clear();
+                best_moves.push(move_);
+            } else if score == best_score {
+                best_moves.push(move_);
+            }
+        }
+
+        // Randomly select from among the best moves
         let mut rng = rand::thread_rng();
-        let selected_move = legal_moves[rng.gen_range(0..legal_moves.len())].clone();
+        let selected_move = best_moves[rng.gen_range(0..best_moves.len())].clone();
         
-        // Make the selected move
-        self.make_move(selected_move)
+        // Make the selected move and announce it
+        let move_text = self.move_to_algebraic(&selected_move);
+        println!("Computer evaluates position as: {}", best_score);
+        self.make_move(selected_move)?;
+        println!("Computer plays: {}", move_text);
+        
+        Ok(())
     }
     
     // Convert a move to algebraic notation for display

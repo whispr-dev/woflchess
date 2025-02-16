@@ -1,6 +1,3 @@
-use std::fmt;
-use rand::Rng;  // Add this line
-
 #[derive(Clone, Copy, PartialEq, Debug)]  // Added Debug here
 enum PieceType {
     Pawn,
@@ -50,6 +47,7 @@ struct Move {
     is_en_passant: bool,
     promotion: Option<PieceType>,
 }
+use std::fmt;
 
 // First, let's add Display implementations for our piece-related types
 impl fmt::Display for PieceType {
@@ -722,7 +720,7 @@ impl GameState {
             return Err("Empty move string");
         }
     
-        let (piece_type, _start_idx) = match chars[0] {
+        let (piece_type, start_idx) = match chars[0] {
             'N' => (PieceType::Knight, 1),
             'B' => (PieceType::Bishop, 1),
             'R' => (PieceType::Rook, 1),
@@ -858,189 +856,38 @@ impl GameState {
     
             self.make_move(move_)
         }
-
-    fn generate_legal_moves(&self) -> Vec<Move> {
-        let mut legal_moves = Vec::new();
-        
-        for i in 0..8 {
-            for j in 0..8 {
-                if let Some(piece) = self.board[i][j] {
-                    if piece.color == self.current_turn {
-                        // Try all possible destination squares
-                        for x in 0..8 {
-                            for y in 0..8 {
-                                let test_move = Move {
-                                    from: (i, j),
-                                    to: (x, y),
-                                    piece_moved: piece,
-                                    piece_captured: self.board[x][y],
-                                    is_castling: false, // We'll check this in is_valid_move
-                                    is_en_passant: false, // We'll check this in is_valid_move
-                                    promotion: None,
-                                };
-                                
-                                if self.is_valid_move(&test_move) {
-                                    legal_moves.push(test_move);
-                                }
-                            }
-                        }
-                        
-                        // Check castling moves if this is a king
-                        if piece.piece_type == PieceType::King {
-                            let rank = if piece.color == Color::White { 0 } else { 7 };
-                            
-                            // Kingside castling
-                            let kingside_move = Move {
-                                from: (4, rank),
-                                to: (6, rank),
-                                piece_moved: piece,
-                                piece_captured: None,
-                                is_castling: true,
-                                is_en_passant: false,
-                                promotion: None,
-                            };
-                            if self.is_valid_move(&kingside_move) {
-                                legal_moves.push(kingside_move);
-                            }
-                            
-                            // Queenside castling
-                            let queenside_move = Move {
-                                from: (4, rank),
-                                to: (2, rank),
-                                piece_moved: piece,
-                                piece_captured: None,
-                                is_castling: true,
-                                is_en_passant: false,
-                                promotion: None,
-                            };
-                            if self.is_valid_move(&queenside_move) {
-                                legal_moves.push(queenside_move);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
-        legal_moves
-    }
-    
-    // Make a random computer move
-    fn make_computer_move(&mut self) -> Result<(), &'static str> {
-        let legal_moves = self.generate_legal_moves();
-        
-        if legal_moves.is_empty() {
-            if self.is_checkmate() {
-                return Err("Checkmate!");
-            } else {
-                return Err("Stalemate!");
-            }
-        }
-        
-        // Select a random move
-        let mut rng = rand::thread_rng();
-        let selected_move = legal_moves[rng.gen_range(0..legal_moves.len())].clone();
-        
-        // Make the selected move
-        self.make_move(selected_move)
-    }
-    
-    // Convert a move to algebraic notation for display
-    fn move_to_algebraic(&self, move_: &Move) -> String {
-        if move_.is_castling {
-            if move_.to.0 == 6 { // Kingside
-                return "O-O".to_string();
-            } else { // Queenside
-                return "O-O-O".to_string();
-            }
-        }
-        
-        let piece_char = match move_.piece_moved.piece_type {
-            PieceType::Pawn => "",
-            PieceType::Knight => "N",
-            PieceType::Bishop => "B",
-            PieceType::Rook => "R",
-            PieceType::Queen => "Q",
-            PieceType::King => "K",
-        };
-        
-        let capture_char = if move_.piece_captured.is_some() || move_.is_en_passant { "x" } else { "" };
-        
-        let dest_file = (move_.to.0 as u8 + b'a') as char;
-        let dest_rank = (move_.to.1 + 1).to_string();
-        
-        format!("{}{}{}{}", piece_char, capture_char, dest_file, dest_rank)
-    }
 }
-
-// Modified main function to include computer play
-fn main() {
-    let mut game = GameState::new();
-    println!("Welcome to Chess!");
-    println!("You play as White against the computer.");
-    println!("Enter moves in the format: 'e2e4', 'e2 e4', 'e4', or 'Nf3'");
-    println!("Type 'quit' to exit\n");
+    // Main function
+    fn main() {
+        let mut game = GameState::new();
+        println!("Welcome to Chess!");
+        println!("Enter moves in the format: 'e2e4', 'e2 e4', 'e2 to e4', or 'O-O' for castling");
+        println!("Type 'quit' to exit\n");
+        
+        game.display();
     
-    game.display();
-
-    loop {
-        println!("\n{}", game.get_game_status());
-        
-        // Player's turn (White)
-        println!("Enter your move:");
-        let mut input = String::new();
-        
-        if let Err(e) = std::io::stdin().read_line(&mut input) {
-            println!("Error reading input: {}", e);
-            continue;
-        }
-
-        let input = input.trim();
-        
-        if input == "quit" {
-            break;
-        }
-
-        // Make player's move
-        match game.make_move_from_str(input) {
-            Ok(()) => {
-                println!("Move successful!");
-                game.display();
-                
-                // Check if game is over after player's move
-                if game.is_checkmate() {
-                    println!("Checkmate! You win!");
-                    break;
-                }
-                if game.is_stalemate() {
-                    println!("Stalemate! Game is a draw!");
-                    break;
-                }
-                
-                // Computer's turn
-                println!("\nComputer is thinking...");
-                match game.make_computer_move() {
-                    Ok(()) => {
-                        println!("Computer moved!");
-                        game.display();
-                        
-                        // Check if game is over after computer's move
-                        if game.is_checkmate() {
-                            println!("Checkmate! Computer wins!");
-                            break;
-                        }
-                        if game.is_stalemate() {
-                            println!("Stalemate! Game is a draw!");
-                            break;
-                        }
-                    },
-                    Err(e) => {
-                        println!("Computer error: {}", e);
-                        break;
-                    }
-                }
-            },
-            Err(e) => println!("❌ {}", e),
+        loop {
+            println!("\n{}", game.get_game_status());
+            println!("Enter your move:");
+            let mut input = String::new();
+            
+            if let Err(e) = std::io::stdin().read_line(&mut input) {
+                println!("Error reading input: {}", e);
+                continue;
+            }
+    
+            let input = input.trim();
+            
+            if input == "quit" {
+                break;
+            }
+    
+            match game.make_move_from_str(input) {
+                Ok(()) => {
+                    println!("Move successful!");
+                    game.display();
+                },
+                Err(e) => println!("❌ {}", e),
+            }
         }
     }
-}

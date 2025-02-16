@@ -1,6 +1,3 @@
-use std::fmt;
-use rand::Rng;  // Add this line
-
 #[derive(Clone, Copy, PartialEq, Debug)]  // Added Debug here
 enum PieceType {
     Pawn,
@@ -50,6 +47,7 @@ struct Move {
     is_en_passant: bool,
     promotion: Option<PieceType>,
 }
+use std::fmt;
 
 // First, let's add Display implementations for our piece-related types
 impl fmt::Display for PieceType {
@@ -696,8 +694,8 @@ impl GameState {
         })
     }
 
-    fn parse_algebraic_notation(&self, move_str: &str) -> Result<((usize, usize), (usize, usize)), &'static str> {
-        // Special cases first
+    fn parse_move_string(&self, move_str: &str) -> Result<((usize, usize), (usize, usize)), &'static str> {
+        // Handle castling notation first
         match move_str {
             "O-O" | "0-0" => {
                 let (rank, king_file, to_file) = match self.current_turn {
@@ -715,133 +713,81 @@ impl GameState {
             },
             _ => {}
         }
-    
-        // Regular algebraic notation (e.g., "Nf3", "e4", "Bxe5")
-        let chars: Vec<char> = move_str.chars().collect();
-        if chars.is_empty() {
-            return Err("Empty move string");
-        }
-    
-        let (piece_type, _start_idx) = match chars[0] {
-            'N' => (PieceType::Knight, 1),
-            'B' => (PieceType::Bishop, 1),
-            'R' => (PieceType::Rook, 1),
-            'Q' => (PieceType::Queen, 1),
-            'K' => (PieceType::King, 1),
-            'a'..='h' => (PieceType::Pawn, 0),  // Pawn moves don't have a prefix
-            _ => return Err("Invalid move notation"),
-        };
-    
-        // For pawn moves, we can directly parse the destination
-        if piece_type == PieceType::Pawn {
-            let to = self.parse_square(move_str)
-                .ok_or("Invalid destination square")?;
-            
-            // Find the pawn that can make this move
-            let from = self.find_piece_that_can_move(piece_type, to)?;
-            return Ok((from, to));
-        }
-    
-        // For other pieces, get the destination from the last two characters
-        let dest_str = &move_str[move_str.len()-2..];
-        let to = self.parse_square(dest_str)
-            .ok_or("Invalid destination square")?;
-    
-        // Find the piece that can make this move
-        let from = self.find_piece_that_can_move(piece_type, to)?;
-    
-        Ok((from, to))
-    }
 
-    fn find_piece_that_can_move(&self, piece_type: PieceType, to: (usize, usize)) -> Result<(usize, usize), &'static str> {
-        let mut valid_pieces = Vec::new();
-
-        for i in 0..8 {
-            for j in 0..8 {
-                if let Some(piece) = self.board[i][j] {
-                    if piece.piece_type == piece_type && piece.color == self.current_turn {
-                        let test_move = Move {
-                            from: (i, j),
-                            to,
-                            piece_moved: piece,
-                            piece_captured: self.board[to.0][to.1],
-                            is_castling: false,
-                            is_en_passant: false,
-                            promotion: None,
-                        };
-
-                        if self.is_valid_move(&test_move) {
-                            valid_pieces.push((i, j));
-                        }
-                    }
-                }
-            }
-        }
-
-        match valid_pieces.len() {
-            0 => Err("No piece can make that move"),
-            1 => Ok(valid_pieces[0]),
-            _ => Err("Ambiguous move - multiple pieces can move there"),
-        }
-    }
-
-    fn parse_move_string(&self, move_str: &str) -> Result<((usize, usize), (usize, usize)), &'static str> {
-        // Parse normal moves like "e2 to e4" or "e2e4"
+        // Parse normal moves
         let parts: Vec<&str> = move_str.split_whitespace().collect();
         let (from_str, to_str) = match parts.len() {
             2 => (parts[0], parts[1]),  // Format: "e2 e4"
             3 if parts[1] == "to" => (parts[0], parts[2]),  // Format: "e2 to e4"
             1 if move_str.len() == 4 => (&move_str[0..2], &move_str[2..4]),  // Format: "e2e4"
-                _ => return Err("Invalid move format. Use 'e2e4', 'e2 e4', or 'e2 to e4'"),
+            _ => return Err("Invalid move format. Use 'e2e4', 'e2 e4', or 'e2 to e4'"),
         };
-    
+
         let from = self.parse_square(from_str)
             .ok_or("Invalid starting square - use a letter (a-h) followed by a number (1-8)")?;
         let to = self.parse_square(to_str)
             .ok_or("Invalid destination square - use a letter (a-h) followed by a number (1-8)")?;
-    
+
         Ok((from, to))
     }
-
-    fn make_move_from_str(&mut self, move_str: &str) -> Result<(), &'static str> {
-        let (from, to) = if move_str.contains(' ') || move_str.len() == 4 {
-            // Regular coordinate notation (e.g., "e2e4" or "e2 e4")
-            self.parse_move_string(move_str)?
-        } else {
-            // Algebraic notation (e.g., "Nf3")
-            self.parse_algebraic_notation(move_str)?
-        };
-
-        let piece = self.get_piece_at(from)
-            .ok_or("No piece at starting square")?;
-
-        if piece.color != self.current_turn {
-            return Err("It's not your turn!");
-        }
-
-        let move_ = self.create_move(from, to)
-            .ok_or("Couldn't create move")?;
-
-        if !self.is_valid_move(&move_) {
-            return match piece.piece_type {
-                PieceType::Pawn => Err("Invalid pawn move - pawns can only move forward one square (or two on their first move) and capture diagonally"),
-                PieceType::Knight => Err("Invalid knight move - knights move in an L-shape (2 squares in one direction and 1 square perpendicular)"),
-                PieceType::Bishop => Err("Invalid bishop move - bishops can only move diagonally"),
-                PieceType::Rook => Err("Invalid rook move - rooks can only move horizontally or vertically"),
-                PieceType::Queen => Err("Invalid queen move - queens can move horizontally, vertically, or diagonally"),
-                PieceType::King => {
-                    if move_.is_castling {
-                        Err("Invalid castling - ensure the king hasn't moved, the path is clear, and you're not castling through check")
-                    } else {
-                        Err("Invalid king move - kings can only move one square in any direction")
-                    }
+    
+        fn make_move_from_str(&mut self, move_str: &str) -> Result<(), &'static str> {
+            // Handle castling notation first
+            match move_str {
+                "O-O" | "0-0" => {
+                    let (rank, king_file, to_file) = match self.current_turn {
+                        Color::White => (0, 4, 6),
+                        Color::Black => (7, 4, 6),
+                    };
+                    return self.handle_castling_move((king_file, rank), (to_file, rank));
                 },
-            };
+                "O-O-O" | "0-0-0" => {
+                    let (rank, king_file, to_file) = match self.current_turn {
+                        Color::White => (0, 4, 2),
+                        Color::Black => (7, 4, 2),
+                    };
+                    return self.handle_castling_move((king_file, rank), (to_file, rank));
+                },
+                _ => {}
+            }
+    
+            // Parse move string into coordinates
+            let (from, to) = self.parse_move_string(move_str)?;
+            
+            // Get the piece at the starting square
+            let piece = self.get_piece_at(from)
+                .ok_or("No piece at starting square")?;
+    
+            // Check if it's the right player's turn
+            if piece.color != self.current_turn {
+                return Err("It's not your turn!");
+            }
+    
+            // Create and validate the move
+            let move_ = self.create_move(from, to)
+                .ok_or("Couldn't create move")?;
+    
+            if !self.is_valid_move(&move_) {
+                return match piece.piece_type {
+                    PieceType::Pawn => Err("Invalid pawn move - pawns can only move forward one square (or two on their first move) and capture diagonally"),
+                    PieceType::Knight => Err("Invalid knight move - knights move in an L-shape (2 squares in one direction and 1 square perpendicular)"),
+                    PieceType::Bishop => Err("Invalid bishop move - bishops can only move diagonally"),
+                    PieceType::Rook => Err("Invalid rook move - rooks can only move horizontally or vertically"),
+                    PieceType::Queen => Err("Invalid queen move - queens can move horizontally, vertically, or diagonally"),
+                    PieceType::King => {
+                        if move_.is_castling {
+                            Err("Invalid castling - ensure the king hasn't moved, the path is clear, and you're not castling through check")
+                        } else {
+                            Err("Invalid king move - kings can only move one square in any direction")
+                        }
+                    },
+                };
+            }
+    
+            // Make the move
+            self.make_move(move_)
         }
-
-        self.make_move(move_)
-    }
-           // Make the move    
+    
         fn handle_castling_move(&mut self, from: (usize, usize), to: (usize, usize)) -> Result<(), &'static str> {
             let piece = self.get_piece_at(from)
                 .ok_or("No king at starting square")?;
@@ -858,189 +804,39 @@ impl GameState {
     
             self.make_move(move_)
         }
+    }
 
-    fn generate_legal_moves(&self) -> Vec<Move> {
-        let mut legal_moves = Vec::new();
+    // Main function
+    fn main() {
+        let mut game = GameState::new();
+        println!("Welcome to Chess!");
+        println!("Enter moves in the format: 'e2e4', 'e2 e4', 'e2 to e4', or 'O-O' for castling");
+        println!("Type 'quit' to exit\n");
         
-        for i in 0..8 {
-            for j in 0..8 {
-                if let Some(piece) = self.board[i][j] {
-                    if piece.color == self.current_turn {
-                        // Try all possible destination squares
-                        for x in 0..8 {
-                            for y in 0..8 {
-                                let test_move = Move {
-                                    from: (i, j),
-                                    to: (x, y),
-                                    piece_moved: piece,
-                                    piece_captured: self.board[x][y],
-                                    is_castling: false, // We'll check this in is_valid_move
-                                    is_en_passant: false, // We'll check this in is_valid_move
-                                    promotion: None,
-                                };
-                                
-                                if self.is_valid_move(&test_move) {
-                                    legal_moves.push(test_move);
-                                }
-                            }
-                        }
-                        
-                        // Check castling moves if this is a king
-                        if piece.piece_type == PieceType::King {
-                            let rank = if piece.color == Color::White { 0 } else { 7 };
-                            
-                            // Kingside castling
-                            let kingside_move = Move {
-                                from: (4, rank),
-                                to: (6, rank),
-                                piece_moved: piece,
-                                piece_captured: None,
-                                is_castling: true,
-                                is_en_passant: false,
-                                promotion: None,
-                            };
-                            if self.is_valid_move(&kingside_move) {
-                                legal_moves.push(kingside_move);
-                            }
-                            
-                            // Queenside castling
-                            let queenside_move = Move {
-                                from: (4, rank),
-                                to: (2, rank),
-                                piece_moved: piece,
-                                piece_captured: None,
-                                is_castling: true,
-                                is_en_passant: false,
-                                promotion: None,
-                            };
-                            if self.is_valid_move(&queenside_move) {
-                                legal_moves.push(queenside_move);
-                            }
-                        }
-                    }
-                }
+        game.display();
+    
+        loop {
+            println!("\n{}", game.get_game_status());
+            println!("Enter your move:");
+            let mut input = String::new();
+            
+            if let Err(e) = std::io::stdin().read_line(&mut input) {
+                println!("Error reading input: {}", e);
+                continue;
+            }
+    
+            let input = input.trim();
+            
+            if input == "quit" {
+                break;
+            }
+    
+            match game.make_move_from_str(input) {
+                Ok(()) => {
+                    println!("Move successful!");
+                    game.display();
+                },
+                Err(e) => println!("❌ {}", e),
             }
         }
-        
-        legal_moves
     }
-    
-    // Make a random computer move
-    fn make_computer_move(&mut self) -> Result<(), &'static str> {
-        let legal_moves = self.generate_legal_moves();
-        
-        if legal_moves.is_empty() {
-            if self.is_checkmate() {
-                return Err("Checkmate!");
-            } else {
-                return Err("Stalemate!");
-            }
-        }
-        
-        // Select a random move
-        let mut rng = rand::thread_rng();
-        let selected_move = legal_moves[rng.gen_range(0..legal_moves.len())].clone();
-        
-        // Make the selected move
-        self.make_move(selected_move)
-    }
-    
-    // Convert a move to algebraic notation for display
-    fn move_to_algebraic(&self, move_: &Move) -> String {
-        if move_.is_castling {
-            if move_.to.0 == 6 { // Kingside
-                return "O-O".to_string();
-            } else { // Queenside
-                return "O-O-O".to_string();
-            }
-        }
-        
-        let piece_char = match move_.piece_moved.piece_type {
-            PieceType::Pawn => "",
-            PieceType::Knight => "N",
-            PieceType::Bishop => "B",
-            PieceType::Rook => "R",
-            PieceType::Queen => "Q",
-            PieceType::King => "K",
-        };
-        
-        let capture_char = if move_.piece_captured.is_some() || move_.is_en_passant { "x" } else { "" };
-        
-        let dest_file = (move_.to.0 as u8 + b'a') as char;
-        let dest_rank = (move_.to.1 + 1).to_string();
-        
-        format!("{}{}{}{}", piece_char, capture_char, dest_file, dest_rank)
-    }
-}
-
-// Modified main function to include computer play
-fn main() {
-    let mut game = GameState::new();
-    println!("Welcome to Chess!");
-    println!("You play as White against the computer.");
-    println!("Enter moves in the format: 'e2e4', 'e2 e4', 'e4', or 'Nf3'");
-    println!("Type 'quit' to exit\n");
-    
-    game.display();
-
-    loop {
-        println!("\n{}", game.get_game_status());
-        
-        // Player's turn (White)
-        println!("Enter your move:");
-        let mut input = String::new();
-        
-        if let Err(e) = std::io::stdin().read_line(&mut input) {
-            println!("Error reading input: {}", e);
-            continue;
-        }
-
-        let input = input.trim();
-        
-        if input == "quit" {
-            break;
-        }
-
-        // Make player's move
-        match game.make_move_from_str(input) {
-            Ok(()) => {
-                println!("Move successful!");
-                game.display();
-                
-                // Check if game is over after player's move
-                if game.is_checkmate() {
-                    println!("Checkmate! You win!");
-                    break;
-                }
-                if game.is_stalemate() {
-                    println!("Stalemate! Game is a draw!");
-                    break;
-                }
-                
-                // Computer's turn
-                println!("\nComputer is thinking...");
-                match game.make_computer_move() {
-                    Ok(()) => {
-                        println!("Computer moved!");
-                        game.display();
-                        
-                        // Check if game is over after computer's move
-                        if game.is_checkmate() {
-                            println!("Checkmate! Computer wins!");
-                            break;
-                        }
-                        if game.is_stalemate() {
-                            println!("Stalemate! Game is a draw!");
-                            break;
-                        }
-                    },
-                    Err(e) => {
-                        println!("Computer error: {}", e);
-                        break;
-                    }
-                }
-            },
-            Err(e) => println!("❌ {}", e),
-        }
-    }
-}

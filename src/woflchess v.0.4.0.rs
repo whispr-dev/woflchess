@@ -1,6 +1,49 @@
 use std::fmt;
 use rand::Rng;  // Add this line
 
+// First, let's add piece values as constants
+const PAWN_VALUE: i32 = 100;
+const KNIGHT_VALUE: i32 = 320;
+const BISHOP_VALUE: i32 = 330;
+const ROOK_VALUE: i32 = 500;
+const QUEEN_VALUE: i32 = 900;
+const KING_VALUE: i32 = 20000;
+
+// Piece-square tables for positional evaluation
+// These tables give bonuses/penalties based on piece positions
+const PAWN_TABLE: [[i32; 8]; 8] = [
+    [0,  0,  0,  0,  0,  0,  0,  0],
+    [50, 50, 50, 50, 50, 50, 50, 50],
+    [10, 10, 20, 30, 30, 20, 10, 10],
+    [5,  5, 10, 25, 25, 10,  5,  5],
+    [0,  0,  0, 20, 20,  0,  0,  0],
+    [5, -5,-10,  0,  0,-10, -5,  5],
+    [5, 10, 10,-20,-20, 10, 10,  5],
+    [0,  0,  0,  0,  0,  0,  0,  0]
+];
+
+const KNIGHT_TABLE: [[i32; 8]; 8] = [
+    [-50,-40,-30,-30,-30,-30,-40,-50],
+    [-40,-20,  0,  0,  0,  0,-20,-40],
+    [-30,  0, 10, 15, 15, 10,  0,-30],
+    [-30,  5, 15, 20, 20, 15,  5,-30],
+    [-30,  0, 15, 20, 20, 15,  0,-30],
+    [-30,  5, 10, 15, 15, 10,  5,-30],
+    [-40,-20,  0,  5,  5,  0,-20,-40],
+    [-50,-40,-30,-30,-30,-30,-40,-50]
+];
+
+const BISHOP_TABLE: [[i32; 8]; 8] = [
+    [-20,-10,-10,-10,-10,-10,-10,-20],
+    [-10,  0,  0,  0,  0,  0,  0,-10],
+    [-10,  0,  5, 10, 10,  5,  0,-10],
+    [-10,  5,  5, 10, 10,  5,  5,-10],
+    [-10,  0, 10, 10, 10, 10,  0,-10],
+    [-10, 10, 10, 10, 10, 10, 10,-10],
+    [-10,  5,  0,  0,  0,  0,  5,-10],
+    [-20,-10,-10,-10,-10,-10,-10,-20]
+];
+
 #[derive(Clone, Copy, PartialEq, Debug)]  // Added Debug here
 enum PieceType {
     Pawn,
@@ -753,6 +796,92 @@ impl GameState {
         Ok((from, to))
     }
 
+    
+    fn get_piece_value(&self, piece: &Piece) -> i32 {
+      match piece.piece_type {
+          PieceType::Pawn => PAWN_VALUE,
+          PieceType::Knight => KNIGHT_VALUE,
+          PieceType::Bishop => BISHOP_VALUE,
+          PieceType::Rook => ROOK_VALUE,
+          PieceType::Queen => QUEEN_VALUE,
+          PieceType::King => KING_VALUE,
+      }
+  }
+
+  fn get_position_bonus(&self, piece: &Piece, pos: (usize, usize)) -> i32 {
+      let (x, y) = pos;
+      // For black pieces, we flip the position on the board
+      let (row, col) = if piece.color == Color::Black {
+          (7 - y, x)
+      } else {
+          (y, x)
+      };
+
+      match piece.piece_type {
+          PieceType::Pawn => PAWN_TABLE[row][col],
+          PieceType::Knight => KNIGHT_TABLE[row][col],
+          PieceType::Bishop => BISHOP_TABLE[row][col],
+          _ => 0  // No position bonus for other pieces yet
+      }
+  }
+
+  fn evaluate_position(&self) -> i32 {
+      let mut score = 0;
+      
+      // Material and basic positional evaluation
+      for i in 0..8 {
+          for j in 0..8 {
+              if let Some(piece) = self.board[i][j] {
+                  let multiplier = if piece.color == Color::White { 1 } else { -1 };
+                  let piece_value = self.get_piece_value(&piece);
+                  let position_bonus = self.get_position_bonus(&piece, (i, j));
+                  
+                  score += multiplier * (piece_value + position_bonus);
+              }
+          }
+      }
+
+      // Penalize doubled pawns
+      for file in 0..8 {
+          let mut white_pawns = 0;
+          let mut black_pawns = 0;
+          for rank in 0..8 {
+              if let Some(piece) = self.board[file][rank] {
+                  if piece.piece_type == PieceType::Pawn {
+                      if piece.color == Color::White {
+                          white_pawns += 1;
+                      } else {
+                          black_pawns += 1;
+                      }
+                  }
+              }
+          }
+          if white_pawns > 1 {
+              score -= 20 * (white_pawns - 1);  // Penalty for doubled pawns
+          }
+          if black_pawns > 1 {
+              score += 20 * (black_pawns - 1);  // Penalty for opponent's doubled pawns
+          }
+      }
+
+      // Additional evaluation for check and checkmate
+      if self.is_checkmate() {
+          if self.current_turn == Color::White {
+              score = -30000;  // White is checkmated
+          } else {
+              score = 30000;   // Black is checkmated
+          }
+      } else if self.is_in_check(self.current_turn) {
+          if self.current_turn == Color::White {
+              score -= 50;     // White is in check
+          } else {
+              score += 50;     // Black is in check
+          }
+      }
+
+      score
+  }
+
     fn find_piece_that_can_move(&self, piece_type: PieceType, to: (usize, usize)) -> Result<(usize, usize), &'static str> {
         let mut valid_pieces = Vec::new();
 
@@ -925,25 +1054,47 @@ impl GameState {
         legal_moves
     }
     
-    // Make a random computer move
-    fn make_computer_move(&mut self) -> Result<(), &'static str> {
-        let legal_moves = self.generate_legal_moves();
-        
-        if legal_moves.is_empty() {
-            if self.is_checkmate() {
-                return Err("Checkmate!");
-            } else {
-                return Err("Stalemate!");
-            }
-        }
-        
-        // Select a random move
-        let mut rng = rand::thread_rng();
-        let selected_move = legal_moves[rng.gen_range(0..legal_moves.len())].clone();
-        
-        // Make the selected move
-        self.make_move(selected_move)
-    }
+     // Upgrade the computer move selection
+     fn make_computer_move(&mut self) -> Result<(), &'static str> {
+      let legal_moves = self.generate_legal_moves();
+      
+      if legal_moves.is_empty() {
+          if self.is_checkmate() {
+              return Err("Checkmate!");
+          } else {
+              return Err("Stalemate!");
+          }
+      }
+
+      // Evaluate each move and keep track of the best ones
+      let mut best_score = i32::MIN;
+      let mut best_moves = Vec::new();
+
+      for move_ in legal_moves {
+          let mut test_state = self.clone();
+          test_state.make_move_without_validation(&move_);
+          let score = -test_state.evaluate_position();  // Negative because we're evaluating opponent's position
+
+          if score > best_score {
+              best_score = score;
+              best_moves.clear();
+              best_moves.push(move_);
+          } else if score == best_score {
+              best_moves.push(move_);
+          }
+      }
+
+      // Randomly select from among the best moves
+      let mut rng = rand::thread_rng();
+      let selected_move = best_moves[rng.gen_range(0..best_moves.len())].clone();
+      
+      // Make the selected move and announce it
+      let move_text = self.move_to_algebraic(&selected_move);
+      self.make_move(selected_move)?;
+      println!("Computer plays: {}", move_text);
+      
+      Ok(())
+  }
     
     // Convert a move to algebraic notation for display
     fn move_to_algebraic(&self, move_: &Move) -> String {
