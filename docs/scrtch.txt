@@ -1,0 +1,25 @@
+Add special move handling (castling, en passant)
+a method to print the board so we can verify the setup? We could also add some unit tests to make sure everything is positioned correctly.
+
+highlighting possible moves or the last move made
+
+Basic move validation for each piece type
+The move input system (like "e2 to e4")
+
+Check/checkmate detection to prevent invalid moves that leave the king in check
+
+
+
+More descriptive error messages (e.g., "Invalid move: Bishop cannot jump over pieces" instead of just "Invalid move")
+Support for traditional algebraic notation (like "Nf3" for knight to f3)
+Move suggestions when an invalid move is entered
+Ability to show available moves for a selected piece
+
+
+
+
+
+
+
+
+
