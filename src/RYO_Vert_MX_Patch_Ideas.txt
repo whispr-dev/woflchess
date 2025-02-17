@@ -1,0 +1,17 @@
+Vertmix:
+
+Here's some patch examples to get you started with Vert-MX!
+
+- Offset: patch a signal into any input and turn it up to 1x. turn up any other channel, without anything patched. the mix output will be offset by the second channel's voltage, up to 5V. adding more channels will boost as high as 12V, clipping the of the waveform beyond +-12V.
+
+- Invert: each channel is an attenuverter, so you can simply patch into any channel, and turn it counterclockwise to invert a signal.
+
+- Unipolar Invert: this combines offset and invert, allowing you to create unipolar signals from bipolar ones, or invert a unipolar signal. simply patch into any channel, turn its knob counterclockwise, then turn up any other channel to maximum. the mix output will be unipolar and inverted.
+
+- Subtraction: patch any two inputs, turning one all the way up and the other all the way down. this will subtract the channels on the mix output. this is most easily expressed with nothing patched: turn up one channel and down another, and the mix will be 0v as +5+=5 is 0!
+
+- Mid/Side Output: patch left and right into any two inputs and subtract them for just a Side output. Add them for Mid output. DO the opposite with another Vert-MX to de-modulate back to left and right. This can be used to add stereo width by boosting the Side signal, or focusing the stereo field by boosting the Mid signal, as well as processing either signal separately for unique stereo effects!
+
+- Feedback Controller: patch an input signal into any channel, and mult that signal to another module you wish to feedback with (like a fast delay for Karplus-Strong resonator action). Mult the output of the other module to your main signal output/next step in the processing chain, as well as another channel of Vert-MX. turn up the first channel, then slowly turn up the second channel for positive feedback, or turn it down to invert the signal, creating negative feedback. In a Karplus-Strong patch, this will give you all (positive) or only odd (negative) harmonics. Offset can be added as well for clipping over time effects.
+
+- Distortion: mult a signal to all inputs. Turning up all knobs will amplify to the point of clipping. Note: the output will be extremely hot, please attenuate before sending to another module!
