@@ -63,3 +63,7 @@ The weights are saved to "neural_weights.json" and will be loaded automatically 
 
 ------------------------------------------------
 
+v.7.0.0 also comes with human vs. human option - either locally or via internet.
+- to play locally select: play `local`
+- to play via internet select: `server` [to launch a warp server which a human vs. human game can then be launched across.]
+

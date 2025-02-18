@@ -63,3 +63,22 @@ The weights are saved to "neural_weights.json" and will be loaded automatically 
 
 ------------------------------------------------
 
+v.7.0.0 also comes with human vs. human option - either locally or via internet.
+- to play locally select: play `local`
+- to play via internet select: `server start` [to launch a warp server which a human vs. human game can then be launched across.]
+- to kill the net connection: `server stop`
+
+------------------------------------------------
+
+
+The Unicode chess pieces look beautiful on the terminal display. got a fully functioning server with clean start/stop, plus a working chess board display.
+The rendering of the board is particularly nice - you can clearly see:
+
+- All pieces in their correct starting positions
+- Proper Unicode chess characters (♔♕♖♗♘♙ for white, ♚♛♜♝♞♟ for black)
+- Clean grid with file (a-h) and rank (1-8) labels
+- Clear dots (·) for empty squares
+- Current turn indicator showing "White"
+
+-------------------------------------------------
+

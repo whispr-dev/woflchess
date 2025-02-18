@@ -1,0 +1,28 @@
+needs:
+
+- option for both side human input for p vs. p			/-
+
+- option for across interwebs play somehow...			
+
+- `"neural_chess_engine_v2.0"` needs to be changed		
+
+- algebraic input breaks if/when [?]				
+	
+- turn board dots white.					
+- turn numbers yellow.						
+
+- channge computer is thinking to funnier
+
+
+- Implement self-play games for training data
+- Set up the GAN training to learn from those games
+- Add weight persistence so the AI remembers what it learns		
+
+
+- setting up a simple web client to test the multiplayer functionality.
+
+
+- 
+
+- 
+
