@@ -1,0 +1,37 @@
+
+----------------------------------------------
+
+Use play to start a game against the AI
+- enter move as either e.g. `b1c3` or `b1 c3`
+- castling is done via `O-O` for kingside and O-O-O queenside.
+- if no piece is chosen from q/r/k/b when a pawn reaches the back rank it will default to promotion to queen.
+- most everything else is auto-triggered by attempting to move to the relevant ssquare on the board with appropriate piece.
+
+-----------------------------------------------
+Training::
+
+Weight persistence:
+
+Saves neural network weights to a JSON file
+Loads weights on startup
+Periodically saves during training
+
+
+Training commands:
+
+train time XX - Train for XX minutes
+train games XX - Train for XX number of games
+Training results are displayed after completion
+------------------------------------------------
+
+To use it:
+
+Start the program
+Use train time 15 to train for 15 minutes
+Use train games 100 to train for 100 games
+The AI will get progressively better as it trains
+
+The weights are saved to "neural_weights.json" and will be loaded automatically when you restart the program.
+
+------------------------------------------------
+
