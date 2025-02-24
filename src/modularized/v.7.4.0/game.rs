@@ -571,9 +571,6 @@ impl GameState {
             }
         }
 
-        // Update castling rights
-        self.update_castling_rights(mv);
-
         // Handle en passant capture
         if mv.is_en_passant {
             self.board[tx][fy] = None;  // Remove captured pawn
@@ -587,6 +584,9 @@ impl GameState {
             self.last_pawn_double_move = None;
         }
 
+        // Update castling rights
+        self.update_castling_rights(mv);
+
         // Handle promotion
         if let Some(promotion_type) = mv.promotion {
             self.board[tx][ty] = Some(Piece {
@@ -596,35 +596,22 @@ impl GameState {
         }
 
         // Update turn
-    s   elf.current_turn = self.current_turn.opposite();
+        self.current_turn = self.current_turn.opposite();
 
         // Update histories
         self.move_history.push(mv.clone());
         self.position_history.push(self.get_position_key());
     }
 
-        // Rook moves lose specific castling rights
-        if mv.piece_moved.piece_type == PieceType::Rook {
-            match (mv.from, mv.piece_moved.color) {
-                ((0, 7), Color::White) => self.castling_rights.white_queenside = false,
-                ((7, 7), Color::White) => self.castling_rights.white_kingside = false,
-                ((0, 0), Color::Black) => self.castling_rights.black_queenside = false,
-                ((7, 0), Color::Black) => self.castling_rights.black_kingside = false,
-                _ => {}
-            }
-        }
+    pub fn is_within_bounds(pos: (usize, usize)) -> bool {
+        pos.0 < 8 && pos.1 < 8
+    }
 
-        // Rook captures lose castling rights
-        if let Some(captured) = mv.piece_captured {
-            if captured.piece_type == PieceType::Rook {
-                match (mv.to, captured.color) {
-                    ((0, 7), Color::White) => self.castling_rights.white_queenside = false,
-                    ((7, 7), Color::White) => self.castling_rights.white_kingside = false,
-                    ((0, 0), Color::Black) => self.castling_rights.black_queenside = false,
-                    ((7, 0), Color::Black) => self.castling_rights.black_kingside = false,
-                    _ => {}
-                }
-            }
+    pub fn get_piece_at(&self, pos: (usize, usize)) -> Option<&Piece> {
+        if Self::is_within_bounds(pos) {
+            self.board[pos.0][pos.1].as_ref()
+        } else {
+            None
         }
     }
 
@@ -901,7 +888,7 @@ impl GameState {
         }
     }
 
-    fn is_path_clear(&self, from: (usize, usize), to: (usize, usize)) -> bool {
+    ub fn is_path_clear(&self, from: (usize, usize), to: (usize, usize)) -> bool {
         let (fx, fy) = (from.0 as i32, from.1 as i32);
         let (tx, ty) = (to.0 as i32, to.1 as i32);
     
@@ -911,7 +898,6 @@ impl GameState {
         let mut x = fx + dx;
         let mut y = fy + dy;
     
-        // Check all squares except the destination
         while (x, y) != (tx, ty) {
             if x < 0 || x >= 8 || y < 0 || y >= 8 {
                 return false;
@@ -923,12 +909,6 @@ impl GameState {
             y += dy;
         }
         
-        // Destination square can contain enemy piece (capture) but not friendly piece
-        if let Some(dest_piece) = self.board[tx as usize][ty as usize] {
-            if dest_piece.color == self.current_turn {
-                return false;
-            }
-        }
         true
     }
 
@@ -1000,7 +980,7 @@ impl GameState {
         legal_moves
     }
 
-    pub fn is_square_attacked(&mut self, pos: (usize, usize), by_color: Color) -> bool {
+    pub fn is_square_attacked(&self, pos: (usize, usize), by_color: Color) -> bool {
         for file in 0..8 {
             for rank in 0..8 {
                 if let Some(piece) = self.board[file][rank] {
