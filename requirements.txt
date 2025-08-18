@@ -1,0 +1,4 @@
+torch>=2.2
+numpy>=1.26
+python-chess>=1.999
+tqdm>=4.66

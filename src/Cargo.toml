@@ -1,7 +1,0 @@
-[package]
-name = "chess_game"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-# We don't need any external dependencies yet!
